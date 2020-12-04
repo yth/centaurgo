@@ -3,7 +3,7 @@
 WHITE_KO, WHITE, EMPTY, BLACK, BLACK_KO = range(-2,3)
 
 
-# Using OGS Standard 9x9 Komi
+7# Using OGS Standard 9x9 Komi
 KOMI = 5.5
 
 
@@ -55,7 +55,7 @@ class GoBoard:
 			# Board State and Board State Helpers
 			self.board = copy.deepcopy(board.board)
 			self.size = board.size
-			self.coords = copy.deepcopy(board.neighbors)
+			self.coords = copy.deepcopy(board.coords)
 			self.neighbors = copy.deepcopy(board.neighbors)
 			self.moves = copy.deepcopy(board.moves)
 
@@ -106,6 +106,7 @@ class GoBoard:
 			while frontier:
 				xp, yp = frontier.pop()
 				self.board[xp][yp] = 0
+				self.moves.append((xp, yp))
 				prisoners += 1
 				for xpp, ypp in self.neighbors[(xp, yp)]:
 					if (xpp, ypp) not in explored and \
@@ -131,6 +132,8 @@ class GoBoard:
 		before = self.board[x][y]
 		self.board[x][y] = self.current_player
 		playable = False
+
+		# Check if able to capture
 		for xp, yp in self.neighbors[(x, y)]:
 			if self.board[xp][yp] == -self.current_player:
 				liberties = self.list_liberties(xp, yp)
@@ -146,6 +149,7 @@ class GoBoard:
 					else:
 						self.b_captures += captures
 
+		# If not capturing, has liberties to live
 		if playable == False:
 			liberties = self.list_liberties(x, y)
 			if liberties:
@@ -160,6 +164,12 @@ class GoBoard:
 
 			# Change player
 			self.current_player *= -1
+
+			# Remove x, y from moves list
+			for i in range(len(self.moves)):
+				if self.moves[i] == (x, y):
+					del(self.moves[i])
+					break
 
 			return True
 		else:
