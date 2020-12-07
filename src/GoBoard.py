@@ -26,9 +26,6 @@ C 2s 2s+1 ...
 where s is the size of the board, and 0, 1 2 ... s ... 2s ... are the indexes.
 """
 
-# Idea borrowed from MuGo by Brian Lee (brilee)
-def check_bounds(c):
-	return c[0] % SIZE == c[0] and c[1] % SIZE == c[1]
 
 class GoBoard:
 	def __init__(self, board = None,
@@ -40,10 +37,9 @@ class GoBoard:
 			# Board State and Board State Helpers
 			self.board = np.zeros([size, size])
 			self.size = size
-				# Idea borrowed from MuGo by Brian Lee (brilee)
-			self.coords = [(i, j) for i in range(size) for j in range(size)]
-			self.neighbors = {(x, y): list(filter(check_bounds, [(x+1, y), (x-1, y), (x, y+1), (x, y-1)])) for (x, y) in self.coords}
+			# Idea borrowed from MuGo by Brian Lee (brilee)
 			self.moves = [(i, j) for i in range(size) for j in range(size)]
+			self.neighbors = {(x, y): list(filter(self.check_bounds, [(x+1, y), (x-1, y), (x, y+1), (x, y-1)])) for (x, y) in self.moves}
 
 			# Capture State
 			self.w_captures = white_captures + komi
@@ -55,7 +51,6 @@ class GoBoard:
 			# Board State and Board State Helpers
 			self.board = copy.deepcopy(board.board)
 			self.size = board.size
-			self.coords = copy.deepcopy(board.coords)
 			self.neighbors = copy.deepcopy(board.neighbors)
 			self.moves = copy.deepcopy(board.moves)
 
@@ -65,6 +60,11 @@ class GoBoard:
 
 			# Current Player
 			self.current_player = board.current_player
+
+
+	# Idea borrowed from MuGo by Brian Lee (brilee)
+	def check_bounds(self, c):
+		return c[0] % self.size == c[0] and c[1] % self.size == c[1]
 
 
 	# Place a marker for any value at the coord x, y
@@ -97,6 +97,7 @@ class GoBoard:
 
 		return liberties
 
+
 	# Captures the group with a stone at x, y and return the # of captures
 	def captures(self, x, y):
 		if self.board[x][y] == -self.current_player:
@@ -116,6 +117,7 @@ class GoBoard:
 			return prisoners
 		else:
 			return 0
+
 
 	def play_move(self, x, y):
 		if x < 0 or x >= self.size:
@@ -176,4 +178,3 @@ class GoBoard:
 			# Reset board
 			self.board[x][y] = before
 			return False
-

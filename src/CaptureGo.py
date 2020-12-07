@@ -15,11 +15,6 @@ from MCTS import MCTS_Node
 sys.setrecursionlimit(1000000)
 
 
-# Required Captures
-SIZE = 9
-N = (SIZE * SIZE) // 2 + 1 # ~ SIZE * SIZE / 2
-
-
 # Helper Function
 # Propagate value up the MCST
 def propagate(node, value):
@@ -35,15 +30,13 @@ def propagate(node, value):
 
 # Helper Function
 # Random MC rollouts starting with a board position and node position
-def explore_helper(board, node):
+def explore_helper(board, node, N):
 	board = GoBoard(board)
 	while True:
 		# Select a valid move and play it
 		# Randomize the move order
 		# Equivalent result to random.choice, but this way we can see if there
 		# are no valid moves.
-		random.shuffle(board.moves)
-		random.shuffle(board.moves)
 		random.shuffle(board.moves)
 		play = False
 		move = None
@@ -80,34 +73,88 @@ def explore_helper(board, node):
 			propagate(node, 1)
 			break
 
+# Find the next move with the smallest win rate for black
+def find_min_value_child(node):
+	min_move = None
+	freq = 0
+	win = 1
+	for child in node.children:
+		n, v, move = node.get_evaluation()
+		new_win = v / n
+
+		if new_win < win:
+			win = new_win
+			freq = n
+			min_move = move
+		elif new_win == win and n > freq: # Use the more certain move
+			freq = n
+			min_move = move
+
+	return min_move, freq, win
+
+# Find the next move with the smallest win rate for black
+def find_max_value_child(node):
+	max_move = None
+	freq = 0
+	win = 0
+	for child in node.children:
+		n, v, move = node.get_evaluation()
+		new_win = v / n
+
+		if new_win > win:
+			win = new_win
+			freq = n
+			max_move = move
+		elif new_win == win and n > freq: # Use the more certain move
+			freq = n
+			max_move = move
+
+	return max_move, freq, win
+
 
 class CaptureGo:
-	def __init__(self):
-		self.board = GoBoard()
+	def __init__(self, size=9, komi=5.5):
+		self.SIZE = size
+		self.N = ((size * size) // 2) + 1
+		self.board = GoBoard(size = size, komi = komi)
 		self.mcst_root = MCTS_Node()
 		self.step = 0
+		print("GOT HERE2")
+		print(self.N)
+		print(self.N)
 
 	# move must be a valid move on the current board
-	def explore(self, budget, move = None):
+	def explore(self, budget, move1 = None, move2 = None):
 		# Fix the right starting point
 		board = GoBoard(self.board)
 		node = self.mcst_root
 
-		if move:
-			play = board.play_move(*move)
+		if move1:
+			play = board.play_move(*move1)
 			if not play:
 				return
-			if move in node.children:
-				node = node.children[move]
+			elif move1 in node.children:
+				node = node.children[move1]
 			else:
-				node.children[move] = MCTS_Node(node, move)
-				node = node.children[move]
+				node.children[move1] = MCTS_Node(node, move1)
+				node = node.children[move1]
+
+		if move2:
+			play = board.play_move(*move2)
+			if not play:
+				return
+			elif move2 in node.children:
+				node = node.children[move2]
+			else:
+				node.children[move2] = MCTS_Node(node, move2)
+				node = node.children[move2]
 
 		# Explore budget number of times and let explore_helper build the tree
 		for i in range(budget):
-			explore_helper(board, node)
+			explore_helper(board, node, self.N)
 
 	# Return the best move according to the MCST
+	# Using prunning
 	def pick_best(self):
 		if self.board.current_player == BLACK:
 			win = 0
@@ -117,28 +164,25 @@ class CaptureGo:
 		best = None
 		freq = 0
 		for child in self.mcst_root.children:
-			n, v, move = self.mcst_root.children[child].get_evaluation()
-			new_win = v / n
+			node = self.mcst_root.children[child]
 			if self.board.current_player == BLACK:
-				if new_win > win:
-					win = new_win
-					freq = n
-					best = move
-				elif new_win == win:
-					if n > freq:
-						win = new_win
-						freq = n
-						best = move
+				min_move, min_freq, min_win = find_min_value_child(node)
+				if min_win > win:
+					win = min_win
+					best = min_move
+					freq = min_freq
+				elif min_win == win and min_freq > freq:
+					best = min_move
+					freq = min_freq
 			else:
-				if new_win < win:
-					win = new_win
-					freq = n
-					best = move
-				elif new_win == win:
-					if n > freq:
-						win = new_win
-						freq = n
-						best = move
+				max_move, max_freq, max_win = find_max_value_child(node)
+				if max_win < win:
+					win = max_win
+					best = max_move
+					freq = max_freq
+				elif max_win == win and max_freq > freq:
+					best = max_move
+					freq = max_freq
 
 		return best, win ,freq
 
@@ -147,48 +191,61 @@ class CaptureGo:
 		# self.explore(len(self.board.moves) ** 2)
 
 		start = time.time()
-		self.explore(1000)
+		# self.explore(10)
 
-		# Explore every possible move; too slow
-		# for move in self.board.moves:
-		# 	if move in self.mcst_root.children:
-		# 		n = self.mcst_root.children[move].visited
-		# 	else:
-		# 		n = 0
-		#
-		# 	self.explore((SIZE * SIZE * 2) - n, move)
+		# Explore every possible move first play; too slow
+		for move1 in self.board.moves:
+			for move2 in self.board.moves:
+				n = 0
+				if move1 in self.mcst_root.children:
+					node = self.mcst_root.children[move1]
+					if move2 in node.children:
+						n = node.children[move2].visited
+
+				# self.explore((SIZE * SIZE * 2) - n, move)
+				self.explore(SIZE - n, move1, move2)
+
 		end = time.time()
 
 		print("Exploration time: ", end - start, "seconds")
 
 		# Pick the best move based on the exploration
 		best, win_rate, freq = self.pick_best()
+		if best is None:
+			print(self.board.moves)
+			return(self.board.moves)
 
-		if freq < SIZE * SIZE * 2 and best is not None:
-			print("Considering")
-			start = time.time()
-			self.explore((SIZE * SIZE * 2) - freq, best)
-			end = time.time()
-			print("Consideration time: ", end - start, "seconds")
 
-			n, v, move = self.mcst_root.children[best].get_evaluation()
-			if self.board.current_player == BLACK and (v / n) < 0.5:
-				print("Re-exploring")
-				return self.recommend()
-			elif self.board.current_player == WHITE and (v / n) > 0.5:
-				print("Re-exploring")
-				return self.recommend()
+		# if freq < SIZE * SIZE * 2:
+		# 	print("Considering")
+		# 	start = time.time()
+		# 	self.explore((SIZE * SIZE * 2) - freq, best)
+		# 	end = time.time()
+		# 	print("Consideration time: ", end - start, "seconds")
+		#
+		# 	node = self.mcst_root.children[best]
+		# 	if self.board.current_player == BLACK:
+		# 		_, _, win = find_min_value_child(node)
+		# 		if win < 0.5:
+		# 			print("Re-exploring")
+		# 			return self.recommend()
+		# 	else: # WHITE
+		# 		_, _, win = find_max_value_child(node)
+		# 		if win > 0.5:
+		# 			print("Re-exploring")
+		# 			return self.recommend()
 
 		# print("Options explored: ", len(self.mcst_root.children))
 		return best
 
 	def has_won(self):
-		if self.board.w_captures > N or self.board.b_captures > N:
+		if self.board.w_captures > self.N or self.board.b_captures > self.N:
 			return True
 		return False
 
 	def display(self):
-		print("   0 1 2 3 4 5 6 7 8")
+		s = "   " + ' '.join(map(str, list(range(self.SIZE))))
+		print(s)
 		for i in range(self.board.size):
 			print("{}: ".format(i), end='')
 			for j in range(self.board.size):
@@ -204,7 +261,7 @@ class CaptureGo:
 		if self.board.current_player == BLACK:
 			print("Black to play.")
 		else:
-			print("White to play.p")
+			print("White to play.")
 		print(self.mcst_root.identity, "was played.")
 
 	def handle_command(self, command):
@@ -216,6 +273,29 @@ class CaptureGo:
 
 		elif command == "r" or command == "recommend":
 			print("Recommended Move: ", self.recommend())
+
+		elif "v" in command:
+			command = command.split()
+			if "v" in command[0] and len(command) == 3:
+				try:
+					x = int(command[1])
+				except:
+					print("Bad x coordinate")
+					return
+
+				try:
+					y = int(command[2])
+				except:
+					print("Bad y coordinate")
+					return
+
+			if (x, y) in self.mcst_root.children:
+				v = self.mcst_root.children[(x, y)].value
+				n = self.mcst_root.children[(x, y)].visited
+				print(v / n)
+			else:
+				move = (x, y)
+				print(move, "is unexplored.")
 
 		elif "p" in command:
 			command = command.split()
