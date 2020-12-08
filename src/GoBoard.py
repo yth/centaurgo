@@ -3,7 +3,7 @@
 WHITE_KO, WHITE, EMPTY, BLACK, BLACK_KO = range(-2,3)
 
 
-7# Using OGS Standard 9x9 Komi
+# Using OGS Standard 9x9 Komi
 KOMI = 5.5
 
 
@@ -119,6 +119,7 @@ class GoBoard:
 			return 0
 
 
+	# Attempt to play the move specified on the board
 	def play_move(self, x, y):
 		if x < 0 or x >= self.size:
 			return False
@@ -129,6 +130,8 @@ class GoBoard:
 		elif self.board[x][y] == BLACK_KO and self.current_player == BLACK:
 			return False
 		elif self.board[x][y] == WHITE_KO and self.current_player == WHITE:
+			return False
+		elif self.won():
 			return False
 
 		before = self.board[x][y]
@@ -178,3 +181,20 @@ class GoBoard:
 			# Reset board
 			self.board[x][y] = before
 			return False
+
+
+	# Tell which side is wining based on captures
+	def winning(self):
+		if self.w_captures > self.b_captures:
+			return WHITE
+		elif self.b_captures > self.w_captures:
+			return BLACK
+		else:
+			return EMPTY
+
+
+	# Tell which side has won
+	def won(self):
+		m = max(self.w_captures, self.b_captures)
+		if m > (self.size * self.size) // 2 + 1:
+			return True

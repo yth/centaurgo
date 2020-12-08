@@ -1,32 +1,19 @@
-# TODO: Add prunning methods -- don't choose a move with a good opponent followup
+import time
+import random
+import sys
+import copy
 
 
 import numpy as np
 
 
-import random
-import time # Delete this later
-import sys
-
 from GoBoard import *
-from MCTS import MCTS_Node
+from helper import *
+from MCTS import *
 
 
 sys.setrecursionlimit(1000000)
 
-
-# Helper Function
-# Propagate value up the MCST
-def propagate(node, value):
-	if node.value == None:
-		node.value = value
-	else:
-		node.value += value
-
-	node.visited += 1
-
-	if node.parent:
-		propagate(node.parent, value)
 
 # Helper Function
 # Random MC rollouts starting with a board position and node position
@@ -34,7 +21,6 @@ def explore_helper(board, node, N):
 	board = GoBoard(board)
 	while True:
 		# Select a valid move and play it
-		# Randomize the move order
 		# Equivalent result to random.choice, but this way we can see if there
 		# are no valid moves.
 		random.shuffle(board.moves)
@@ -73,43 +59,33 @@ def explore_helper(board, node, N):
 			propagate(node, 1)
 			break
 
-# Find the next move with the smallest win rate for black
-def find_min_value_child(node):
-	min_move = None
-	freq = 0
-	win = 1
-	for child in node.children:
-		n, v, move = node.get_evaluation()
-		new_win = v / n
 
-		if new_win < win:
-			win = new_win
-			freq = n
-			min_move = move
-		elif new_win == win and n > freq: # Use the more certain move
-			freq = n
-			min_move = move
+def df_explore_helper(board, node):
+	board = GoBoard(board)
+	if not node.moves:
+		node.moves = copy.deepcopy(board.moves)
 
-	return min_move, freq, win
+	while node.moves:
+		random.shuffle(node.moves)
+		move = node.moves.pop()
+		if board.play_move(*move):
+			if move in node.children:
+				node = node.children[move]
+			else:
+				new_node = MCTS_Node(node, move)
+				node.children[move] = new_node
+				node = new_node
 
-# Find the next move with the smallest win rate for black
-def find_max_value_child(node):
-	max_move = None
-	freq = 0
-	win = 0
-	for child in node.children:
-		n, v, move = node.get_evaluation()
-		new_win = v / n
+			if node.moves == None:
+				node.moves = copy.deepcopy(board.moves)
 
-		if new_win > win:
-			win = new_win
-			freq = n
-			max_move = move
-		elif new_win == win and n > freq: # Use the more certain move
-			freq = n
-			max_move = move
-
-	return max_move, freq, win
+	winner = board.winning()
+	if winner == BLACK: # Done because WHITE usually have an edge?
+		propagate(node, 1)
+	elif winner == WHITE:
+		propagate(node, 0)
+	else:
+		propagate(node, 0.5)
 
 
 class CaptureGo:
@@ -117,11 +93,9 @@ class CaptureGo:
 		self.SIZE = size
 		self.N = ((size * size) // 2) + 1
 		self.board = GoBoard(size = size, komi = komi)
-		self.mcst_root = MCTS_Node()
+		self.mcst_root = MCTS_Node(moves=self.board.moves)
 		self.step = 0
-		print("GOT HERE2")
-		print(self.N)
-		print(self.N)
+
 
 	# move must be a valid move on the current board
 	def explore(self, budget, move1 = None, move2 = None):
@@ -151,7 +125,8 @@ class CaptureGo:
 
 		# Explore budget number of times and let explore_helper build the tree
 		for i in range(budget):
-			explore_helper(board, node, self.N)
+			# explore_helper(board, node, self.N)
+			df_explore_helper(board, node)
 
 	# Return the best move according to the MCST
 	# Using prunning
@@ -186,6 +161,10 @@ class CaptureGo:
 
 		return best, win ,freq
 
+	def df_explore(self, board, node, budget = 0):
+		for i in range(budget):
+			df_explore_helper(board, node)
+
 	def recommend(self):
 		# Explore
 		# self.explore(len(self.board.moves) ** 2)
@@ -194,16 +173,18 @@ class CaptureGo:
 		# self.explore(10)
 
 		# Explore every possible move first play; too slow
-		for move1 in self.board.moves:
-			for move2 in self.board.moves:
-				n = 0
-				if move1 in self.mcst_root.children:
-					node = self.mcst_root.children[move1]
-					if move2 in node.children:
-						n = node.children[move2].visited
+		# for move1 in self.board.moves:
+		# 	for move2 in self.board.moves:
+		# 		n = 0
+		# 		if move1 in self.mcst_root.children:
+		# 			node = self.mcst_root.children[move1]
+		# 			if move2 in node.children:
+		# 				n = node.children[move2].visited
+		#
+		# 		# self.explore((SIZE * SIZE * 2) - n, move)
+		# 		self.explore(SIZE - n, move1, move2)
 
-				# self.explore((SIZE * SIZE * 2) - n, move)
-				self.explore(SIZE - n, move1, move2)
+		self.df_explore(self.board, self.mcst_root, budget = self.SIZE ** 6)
 
 		end = time.time()
 
@@ -235,7 +216,7 @@ class CaptureGo:
 		# 			print("Re-exploring")
 		# 			return self.recommend()
 
-		# print("Options explored: ", len(self.mcst_root.children))
+		print("Options explored: ", len(self.mcst_root.children))
 		return best
 
 	def has_won(self):
@@ -266,56 +247,41 @@ class CaptureGo:
 
 	def handle_command(self, command):
 		if command == "h" or command == "help":
-			print("Helpful message")
+			print("<<< Help on the way!")
+
+		elif command == "d" or command == "display":
+			self.display()
 
 		elif command == "q" or command == "quit":
+			print("<<< Moriturus te saluto.")
 			self.board.w_captures = N + 1
 
 		elif command == "r" or command == "recommend":
-			print("Recommended Move: ", self.recommend())
+			print("<<< Recommended Move: ", self.recommend())
 
 		elif "v" in command:
-			command = command.split()
-			if "v" in command[0] and len(command) == 3:
-				try:
-					x = int(command[1])
-				except:
-					print("Bad x coordinate")
-					return
-
-				try:
-					y = int(command[2])
-				except:
-					print("Bad y coordinate")
-					return
-
-			if (x, y) in self.mcst_root.children:
-				v = self.mcst_root.children[(x, y)].value
-				n = self.mcst_root.children[(x, y)].visited
-				print(v / n)
-			else:
-				move = (x, y)
-				print(move, "is unexplored.")
+			command = parse_command_coordinate(command)
+			if command and "v" in command[0]:
+				x = command[1]
+				y = command[2]
+				if (x, y) in self.mcst_root.children:
+					v = self.mcst_root.children[(x, y)].value
+					n = self.mcst_root.children[(x, y)].visited
+					print("<<<", v / n, end=' ')
+					print(n, "trials")
+				else:
+					move = (x, y)
+					print("<<<", move, "is unexplored.")
 
 		elif "p" in command:
-			command = command.split()
-			if "p" in command[0] and len(command) == 3:
-				try:
-					x = int(command[1])
-				except:
-					print("Bad x coordinate")
-					return
-
-				try:
-					y = int(command[2])
-				except:
-					print("Bad y coordinate")
-					return
-
+			command = parse_command_coordinate(command)
+			if command and "p" in command[0]:
+				x = command[1]
+				y = command[2]
 				played = self.board.play_move(x, y)
 
 				if played == False:
-					print("Bad move, try again")
+					print("<<< Bad move, try again")
 				else:
 					self.step += 1
 
@@ -327,5 +293,34 @@ class CaptureGo:
 					print(self.mcst_root.get_win_rate())
 					print(self.mcst_root.visited)
 
-			else:
-				print("Bad move")
+			# command = command.split()
+			# if "p" in command[0] and len(command) == 3:
+			# 	try:
+			# 		x = int(command[1])
+			# 	except:
+			# 		print("Bad x coordinate")
+			# 		return
+			#
+			# 	try:
+			# 		y = int(command[2])
+			# 	except:
+			# 		print("Bad y coordinate")
+			# 		return
+			#
+			# 	played = self.board.play_move(x, y)
+			#
+			# 	if played == False:
+			# 		print("Bad move, try again")
+			# 	else:
+			# 		self.step += 1
+			#
+			# 		if (x, y) not in self.mcst_root.children:
+			# 			self.mcst_root.children[(x, y)] = MCTS_Node(self.mcst_root, (x, y))
+			#
+			# 		self.mcst_root = self.mcst_root.children[(x, y)]
+			# 		self.mcst_root.parent = None
+			# 		print(self.mcst_root.get_win_rate())
+			# 		print(self.mcst_root.visited)
+
+		else:
+			print("<<< Bad command")

@@ -10,7 +10,6 @@ def main():
 		game = CaptureGo(int(sys.argv[1]))
 	elif n == 3:
 		game = CaptureGo(int(sys.argv[1]), float(sys.argv[2]))
-		print("GOT HERE")
 	else:
 		game = CaptureGo()
 
